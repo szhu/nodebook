@@ -186,6 +186,10 @@
         $('.cmdlines').append($(CMDLINE));
       });
 
+      $(window).on('beforeunload', () => {
+        return 'Leave and discard this Nodebook?';
+      });
+
       cmdlines_autoload();
     });
   </script>
