@@ -22,6 +22,9 @@
       border: 0.5px solid #ddd;
       /*border-collapse: collapse;*/
     }
+    .cmdline-error .cmdline-out {
+      color: red;
+    }
     .cmdline-out {
       display: flex;
       flex-direction: row;
@@ -34,6 +37,7 @@
     }
 
     .mono {
+      color: inherit;
       resize: vertical;
       white-space: pre;
       overflow: auto;
@@ -175,7 +179,9 @@
           }
           catch (e) {
             var output = e.stack;
-            $out.val(output);
+            $out.empty().append(
+              $(CMDLINE_OUT_TEXT).val(output)
+            );
             $cmdline.addClass("cmdline-error");
           }
           cmdlines_autosave_debounced();
