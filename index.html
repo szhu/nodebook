@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Nodebook</title>
+  <style type="text/css">
+    .cmdlines {
+      display: flex;
+      flex-direction: column;
+
+      border: 0.5px solid #ddd;
+    }
+    .cmdline {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: row;
+    }
+    .cmdline-in,
+    .cmdline-out {
+      flex-grow: 1;
+      resize: vertical;
+      white-space: pre;
+      overflow: auto;
+      align-content: stretch;
+
+      font-family: 'Menlo', 'Courier', monospace;
+      border: 0.5px solid #ddd;
+      border-collapse: collapse;
+    }
+    .cmdline-in:focus,
+    .cmdline-out:focus {
+      outline: 1px solid red;
+    }
+  </style>
+  <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+  <script type="text/javascript">
+    debounce = function(func, wait, immediate) {
+      var timeout;
+      return function() {
+        var context = this, args = arguments;
+        var later = function() {
+          timeout = null;
+          if (!immediate) func.apply(context, args);
+        };
+        var callNow = immediate && !timeout;
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+        if (callNow) func.apply(context, args);
+      };
+    };
+
+    var CMDLINE = (
+      '<div class="cmdline">' +
+      '<textarea class="cmdline-in"></textarea>' +
+      '<textarea class="cmdline-out" readonly></textarea>' +
+      '</div>' +
+    '');
+    var LINES = 1;
+
+    function cmdlines_export() {
+      cmdlines_data = [];
+      $(".cmdlines .cmdline").each((i, cmdline) => {
+        cmdlines_data.push({
+          in: $(cmdline).find('.cmdline-in').val(),
+          out: $(cmdline).find('.cmdline-out').val(),
+        });
+      });
+      return cmdlines_data;
+    }
+
+    function cmdlines_import(cmdlines_data) {
+      $(".cmdlines").empty();
+      for (cmdline_data of cmdlines_data) {
+        $cmdline = $(CMDLINE);
+        $cmdline.find('.cmdline-in').val(cmdline_data.in || "");
+        $cmdline.find('.cmdline-out').val(cmdline_data.out || "");
+        $('.cmdlines').append($cmdline);
+        cmdlines_autosize_textarea($cmdline.find('.cmdline-in')[0]);
+        cmdlines_autosize_textarea($cmdline.find('.cmdline-out')[0]);
+      }
+    }
+
+    function cmdlines_autoload() {
+      cmdlines_import(
+        sessionStorage.cmdlines ?
+        JSON.parse(sessionStorage.cmdlines) :
+        [
+          {"in": "// https://www.destroyallsoftware.com/talks/wat", "out": ""},
+          {"in": "[] + []", "out": ""},
+          {"in": "[] + {}", "out": "[object Object]"},
+          {"in": "{} + []", "out": "0"},
+          {"in": "{} + {}", "out": "null"},
+          {"in": "Array(16)", "out": "[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]"},
+          {"in": "Array(16).join(\"wat\" + 1)", "out": "wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1wat1"},
+          {"in": "Array(16).join(\"wat\" - 1) + \"Batman!\"", "out": "NaNNaNNaNNaNNaNNaNNaNNaNNaNNaNNaNNaNNaNNaNNaNBatman!"},
+          {"in": "", "out": ""}
+        ]
+      );
+    }
+
+    function cmdlines_autosize_textarea(textarea) {
+      var em = parseFloat(getComputedStyle(textarea).fontSize);
+      $(textarea).css({
+        'height': '0',
+        'min-height': '',
+        'overflow': 'hidden',
+      });
+      $(textarea).css({
+        'height': '',
+        'min-height': textarea.scrollHeight + 2 * em,
+        'overflow': '',
+      });
+    }
+
+    // function cmdlines_autosize_textareas() {
+    //   $('.cmdline-in, .cmdline-out').each((i, textarea) => {
+    //     cmdlines_autosize_textarea(textarea);
+    //   });
+    // }
+
+    function cmdlines_autosave() {
+      sessionStorage.cmdlines = JSON.stringify(cmdlines_export());
+    }
+
+    cmdlines_autosave_debounced = debounce(cmdlines_autosave, 100, false);
+
+    $(() => {
+      $('.cmdlines').on('keyup', '.cmdline-in', (event) => {
+        cmdlines_autosize_textarea(event.currentTarget);
+      });
+      $('.cmdlines').on('keyup', '.cmdline-in', cmdlines_autosave_debounced);
+
+      $('.cmdlines').on('keydown', '.cmdline-in', (event) => {
+        // Ctrl-Enter or Cmd-Enter
+        if ((event.metaKey || event.ctrlKey) && event.keyCode == 13) {
+          var $cmdline = $(event.currentTarget).closest('.cmdline');;
+          var input = $cmdline.find('.cmdline-in').val();
+          try {
+            var output = eval(input);
+            if (typeof output !== 'string') {
+              output = JSON.stringify(output);
+            }
+            $cmdline.find('.cmdline-out').val(output);
+            $cmdline.removeClass("cmdline-error");
+          }
+          catch (e) {
+            var output = e.stack;
+            $cmdline.find('.cmdline-out').val(output);
+            $cmdline.addClass("cmdline-error");
+          }
+          cmdlines_autosave_debounced();
+        }
+      });
+
+      $('.cmdlines').on('focus', '.cmdline:last .cmdline-in', (event) => {
+        $('.cmdlines').append($(CMDLINE));
+      });
+
+      cmdlines_autoload();
+    });
+  </script>
+</head>
+<body>
+  <div>
+    <p>Nodebook is a Jupyter-style notebook interface for JavaScript.</p>
+    <p>Enter JavaScript source on the left, then press <code>Ctrl-Enter</code> or <code>Command-Enter</code> to execute the code in the context of the entire page. The value of the last statement (or errors) will appear on the right.</p>
+    <p>Data is autosaved via <code>sessionStorage</code>. You can reload this page or navigate away and come back and your data will still be here, but if you open this URL in another tab you'll be starting from the clean slate.</p>
+    <p>Currently, you can export data with <code>console.log(JSON.stringify(cmdlines_export()))</code> and import with <code>cmdlines_import(...)</code>.
+  </div>
+  <div class="cmdlines">
+<!--     <script type="text/javascript">
+      for (var i = 0; i < LINES; i++) {
+        document.write(CMDLINE);
+      }
+    </script> -->
+  </div>
+</body>
+</html>
