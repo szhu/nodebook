@@ -14,20 +14,33 @@
       display: flex;
       flex-direction: row;
     }
-    .cmdline-in,
-    .cmdline-out {
+    .cmdline-side {
+      flex-basis: 0;
       flex-grow: 1;
+      align-content: stretch;
+
+      border: 0.5px solid #ddd;
+      /*border-collapse: collapse;*/
+    }
+    .cmdline-out {
+      display: flex;
+      flex-direction: row;
+    }
+    .cmdline-out-text {
+      flex-basis: 0;
+      flex-grow: 1;
+      align-content: stretch;
+      border: none;
+    }
+
+    .mono {
       resize: vertical;
       white-space: pre;
       overflow: auto;
-      align-content: stretch;
 
       font-family: 'Menlo', 'Courier', monospace;
-      border: 0.5px solid #ddd;
-      border-collapse: collapse;
     }
-    .cmdline-in:focus,
-    .cmdline-out:focus {
+    .mono:focus {
       outline: 1px solid red;
     }
   </style>
@@ -50,10 +63,11 @@
 
     var CMDLINE = (
       '<div class="cmdline">' +
-      '<textarea class="cmdline-in"></textarea>' +
-      '<textarea class="cmdline-out" readonly></textarea>' +
+      '<textarea class="cmdline-side cmdline-in mono"></textarea>' +
+      '<div class="cmdline-side cmdline-out"></div>' +
       '</div>' +
     '');
+    var CMDLINE_OUT_TEXT = '<textarea class="cmdline-out-text mono" readonly>';
     var LINES = 1;
 
     function cmdlines_export() {
@@ -61,7 +75,7 @@
       $(".cmdlines .cmdline").each((i, cmdline) => {
         cmdlines_data.push({
           in: $(cmdline).find('.cmdline-in').val(),
-          out: $(cmdline).find('.cmdline-out').val(),
+          out: $(cmdline).find('.cmdline-out-text').val(),
         });
       });
       return cmdlines_data;
@@ -72,10 +86,12 @@
       for (cmdline_data of cmdlines_data) {
         $cmdline = $(CMDLINE);
         $cmdline.find('.cmdline-in').val(cmdline_data.in || "");
-        $cmdline.find('.cmdline-out').val(cmdline_data.out || "");
+        $cmdline.find('.cmdline-out').empty().append(
+          $(CMDLINE_OUT_TEXT).val(cmdline_data.out || "")
+        );
         $('.cmdlines').append($cmdline);
         cmdlines_autosize_textarea($cmdline.find('.cmdline-in')[0]);
-        cmdlines_autosize_textarea($cmdline.find('.cmdline-out')[0]);
+        cmdlines_autosize_textarea($cmdline.find('.cmdline-out-text')[0]);
       }
     }
 
@@ -84,7 +100,7 @@
         sessionStorage.cmdlines ?
         JSON.parse(sessionStorage.cmdlines) :
         [
-          {"in": "// https://www.destroyallsoftware.com/talks/wat", "out": ""},
+          {"in": "// You can return DOM elements!\n$(\n  '<div>Hello, <b>world</b>! ' +\n  '<a href=\"https://www.destroyallsoftware.com/talks/wat\" target=\"_blank\">wat</a></div>'\n);"},
           {"in": "[] + []", "out": ""},
           {"in": "[] + {}", "out": "[object Object]"},
           {"in": "{} + []", "out": "0"},
@@ -111,12 +127,6 @@
       });
     }
 
-    // function cmdlines_autosize_textareas() {
-    //   $('.cmdline-in, .cmdline-out').each((i, textarea) => {
-    //     cmdlines_autosize_textarea(textarea);
-    //   });
-    // }
-
     function cmdlines_autosave() {
       sessionStorage.cmdlines = JSON.stringify(cmdlines_export());
     }
@@ -132,19 +142,40 @@
       $('.cmdlines').on('keydown', '.cmdline-in', (event) => {
         // Ctrl-Enter or Cmd-Enter
         if ((event.metaKey || event.ctrlKey) && event.keyCode == 13) {
-          var $cmdline = $(event.currentTarget).closest('.cmdline');;
+          var $cmdline = $(event.currentTarget).closest('.cmdline');
+          var $out = $cmdline.find('.cmdline-out');
           var input = $cmdline.find('.cmdline-in').val();
           try {
             var output = eval(input);
-            if (typeof output !== 'string') {
-              output = JSON.stringify(output);
+            if (output instanceof Node) {
+              output = $(output);
             }
-            $cmdline.find('.cmdline-out').val(output);
+            if (output instanceof jQuery) {
+              $out.empty();
+              output.each((i, el) => {
+                if (!el.ownerDocument.documentElement.contains(el)) {
+                  $out.append(el);
+                }
+                else {
+                  $out.append(
+                    $('<div>').text(`<${el.tagName.toLowerCase()}> element attached to DOM`)
+                  );
+                }
+              })
+            }
+            else {
+              if (typeof output !== 'string') {
+                output = JSON.stringify(output);
+              }
+              $out.empty().append(
+                $(CMDLINE_OUT_TEXT).val(output)
+              );
+            }
             $cmdline.removeClass("cmdline-error");
           }
           catch (e) {
             var output = e.stack;
-            $cmdline.find('.cmdline-out').val(output);
+            $out.val(output);
             $cmdline.addClass("cmdline-error");
           }
           cmdlines_autosave_debounced();
@@ -166,12 +197,6 @@
     <p>Data is autosaved via <code>sessionStorage</code>. You can reload this page or navigate away and come back and your data will still be here, but if you open this URL in another tab you'll be starting from the clean slate.</p>
     <p>Currently, you can export data with <code>console.log(JSON.stringify(cmdlines_export()))</code> and import with <code>cmdlines_import(...)</code>.
   </div>
-  <div class="cmdlines">
-<!--     <script type="text/javascript">
-      for (var i = 0; i < LINES; i++) {
-        document.write(CMDLINE);
-      }
-    </script> -->
-  </div>
+  <div class="cmdlines"></div>
 </body>
 </html>
